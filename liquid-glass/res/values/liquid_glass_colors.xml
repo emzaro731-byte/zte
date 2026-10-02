@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="gg_glass_light_fill">#B8FFFFFF</color>
+    <color name="gg_glass_light_fill_strong">#D9FFFFFF</color>
+    <color name="gg_glass_dark_fill">#8F15171B</color>
+    <color name="gg_glass_dark_fill_strong">#B51D2026</color>
+    <color name="gg_glass_stroke_light">#66FFFFFF</color>
+    <color name="gg_glass_stroke_dark">#3FFFFFFF</color>
+    <color name="gg_glass_shadow">#33000000</color>
+</resources>
