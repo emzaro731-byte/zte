@@ -2,7 +2,7 @@ name: Build ZTE Liquid Glass Flutter Launcher
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'fix/**']
   workflow_dispatch:
 
 jobs:
