@@ -64,6 +64,18 @@ jobs:
                         result.success(false)
                       }
                     }
+                    "openAppDetails" -> {
+                      try {
+                        val intent = Intent(
+                          android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                          android.net.Uri.parse("package:$packageName")
+                        )
+                        startActivity(intent)
+                        result.success(true)
+                      } catch (_: Exception) {
+                        result.success(false)
+                      }
+                    }
                     else -> result.notImplemented()
                   }
                 }
