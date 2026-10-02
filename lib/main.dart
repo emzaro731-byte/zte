@@ -1,4 +1,4 @@
-import 'dart:ui';
+import 'package:ban_battery_optimization/ban_battery_optimization.dart';\nimport 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -250,7 +250,230 @@ class _AppTile extends StatelessWidget {
   }
 }
 
-class _DockButton extends StatelessWidget {
+
+class TroubleshootingPage extends StatefulWidget {
+  const TroubleshootingPage({super.key});
+
+  @override
+  State<TroubleshootingPage> createState() => _TroubleshootingPageState();
+}
+
+class _TroubleshootingPageState extends State<TroubleshootingPage>
+    with WidgetsBindingObserver {
+  BatteryRestrictionSnapshot? _snapshot;
+  bool _loading = true;
+  String _autoStartStatus = 'Checking ZTE auto-start support…';
+  bool _opening = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final snapshot =
+          await BanBatteryOptimization.getBatteryRestrictionSnapshot();
+      if (!mounted) return;
+      setState(() {
+        _snapshot = snapshot;
+        _loading = false;
+        _autoStartStatus = snapshot.canOpenAutoStartSettings
+            ? 'Available — tap to check in ZTE settings'
+            : 'ZTE auto-start page unavailable; use App info as fallback';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _autoStartStatus = 'Unable to query OEM settings';
+      });
+    }
+  }
+
+  Future<void> _openAutoStart() async {
+    if (_opening) return;
+    setState(() => _opening = true);
+    try {
+      final opened = await BanBatteryOptimization.openAutoStartSettings();
+      if (!mounted) return;
+      setState(() {
+        _autoStartStatus = opened
+            ? 'ZTE settings opened — verify Auto-start / App AI-control there'
+            : 'ZTE page could not be opened — opening App info instead';
+      });
+      if (!opened) await _openAppInfoFallback();
+    } catch (_) {
+      await _openAppInfoFallback();
+    } finally {
+      if (mounted) setState(() => _opening = false);
+    }
+  }
+
+  Future<void> _openAppInfoFallback() async {
+    try {
+      await const MethodChannel('zte_launcher/apps')
+          .invokeMethod('openAppDetails');
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = _snapshot;
+    final manufacturer = snapshot?.manufacturer ?? 'unknown';
+    final autoStartAvailable = snapshot?.canOpenAutoStartSettings ?? false;
+    final batteryRestricted =
+        snapshot?.isBatteryOptimizationEnabled ?? true;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        title: const Text('Troubleshooting'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 32),
+        children: [
+          const Text(
+            'Check the status of required permissions below.\n'
+            'Auto-start is OEM-controlled, so Android cannot reliably report '
+            'whether ZTE has enabled it.',
+            style: TextStyle(color: Colors.white70, fontSize: 16, height: 1.55),
+          ),
+          const SizedBox(height: 26),
+          const Text(
+            'Core Permissions',
+            style: TextStyle(color: Colors.white70, fontSize: 17, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 14),
+          _TroubleCard(
+            icon: Icons.autorenew_rounded,
+            title: 'Auto Start Permission',
+            subtitle: _loading ? 'Checking…' : _autoStartStatus,
+            ok: autoStartAvailable,
+            action: _openAutoStart,
+            busy: _opening,
+          ),
+          const SizedBox(height: 12),
+          _TroubleCard(
+            icon: Icons.battery_alert_rounded,
+            title: 'Battery Optimization',
+            subtitle: batteryRestricted
+                ? 'Restricted — background execution may be limited'
+                : 'Optimized (background run allowed)',
+            ok: !batteryRestricted,
+            action: () async {
+              await BanBatteryOptimization.openBatteryOptimizationSettings();
+            },
+          ),
+          const SizedBox(height: 12),
+          _TroubleCard(
+            icon: Icons.phone_android_rounded,
+            title: 'Device',
+            subtitle: 'Manufacturer: ${manufacturer}'
+                '${snapshot?.androidSdkInt == null ? '' : ' • Android SDK ${snapshot!.androidSdkInt}'}',
+            ok: manufacturer.toLowerCase().contains('zte') ||
+                manufacturer.toLowerCase().contains('nubia'),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'After changing ZTE Auto-start / App AI-control, return here. '
+            'The screen refreshes automatically.',
+            style: TextStyle(color: Colors.white54, height: 1.45),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TroubleCard extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool ok;
+  final VoidCallback? action;
+  final bool busy;
+
+  const _TroubleCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.ok,
+    this.action,
+    this.busy = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: action,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xff151515),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: ok ? Colors.greenAccent : Colors.white12,
+            width: ok ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: .06),
+                borderRadius: BorderRadius.circular(17),
+              ),
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(
+                    color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 5),
+                  Text(subtitle, style: const TextStyle(
+                    color: Colors.white60, fontSize: 14, height: 1.3)),
+                ],
+              ),
+            ),
+            if (busy)
+              const SizedBox(
+                width: 24, height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else if (action != null)
+              Icon(Icons.open_in_new_rounded,
+                  color: ok ? Colors.greenAccent : Colors.white70)
+            else
+              Icon(ok ? Icons.check_circle_rounded : Icons.error_rounded,
+                  color: ok ? Colors.greenAccent : Colors.orangeAccent),
+          ],
+        ),
+      ),
+    );
+  }
+}
+\nclass _DockButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   const _DockButton({required this.icon, required this.onTap});
